@@ -1,0 +1,140 @@
+# life-engine-auth — Phase 1 extraction.
+# Slimmed from apps/core-app/src/main/resources/application.yml — only auth, security, RBAC, sessions,
+# password recovery, Google login, identity-related keys remain. Dev Agent / Crypto / RAG / Agents
+# gRPC / Workflow / Land Radar / Media Studio / OCR keys were intentionally left in the modulith.
+
+server:
+  port: ${LIFE_ENGINE_AUTH_PORT:8080}
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p traceId=%X{traceId:-} requestId=%X{requestId:-} runId=%X{runId:-} agentType=%X{agentType:-} status=%X{status:-} latencyMs=%X{latencyMs:-} [%t] %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.devito.lifeengine.auth: INFO
+    com.devito.lifeengine.security: INFO
+    org.springframework.security: INFO
+
+spring:
+  application:
+    name: life-engine-auth
+  profiles:
+    default: local
+  main:
+    web-application-type: reactive
+
+  # Database ownership: life-engine-auth owns DB `life_engine_auth` (schema `public`).
+  # See docs/operations/11-database-ownership.md in the life-engine repo for the matrix.
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/life_engine_auth}
+    username: ${SPRING_DATASOURCE_USERNAME:life}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5433/life_engine_auth}
+    username: ${SPRING_R2DBC_USERNAME:life}
+    password: ${SPRING_R2DBC_PASSWORD}
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5433/life_engine_auth}
+    user: ${SPRING_FLYWAY_USER:life}
+    password: ${SPRING_FLYWAY_PASSWORD}
+    locations: classpath:db/migration
+
+springdoc:
+  api-docs:
+    enabled: false
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+    path: /swagger-ui.html
+  show-actuator: false
+
+lifeengine:
+  deployment:
+    env: ${APP_ENV:local}
+  tracing:
+    enabled: ${LIFEENGINE_TRACING_ENABLED:true}
+  # Production: comma-separated origins only (no patterns). Local/dev/test use permissive CORS patterns in CorsConfig.
+  http:
+    cors:
+      allowed-origins: ${LIFEENGINE_HTTP_CORS_ALLOWED_ORIGINS:}
+  security:
+    guest:
+      enabled: ${GUEST_AUTH_ENABLED:false}
+    jwt:
+      secret: ${JWT_SECRET}
+      access-token-validity-minutes: 15
+      refresh-token-validity-days: 7
+    login:
+      max-failed-attempts: 5
+      lockout-minutes: 15
+    password-reset:
+      expose-token-for-testing: ${PASSWORD_RESET_DEBUG_TOKEN:false}
+      resend-api-key: ${RESEND_API_KEY:}
+      from-address: ${RESEND_FROM:}
+      reset-link-base-url: ${PASSWORD_RESET_PUBLIC_BO_URL:http://localhost:4200}
+    bootstrap-admin-email: ${AUTH_BOOTSTRAP_USER:}
+    bootstrap-admin-password: ${AUTH_BOOTSTRAP_PASSWORD:}
+    admin-seed:
+      enabled: false
+      email: admin@life-engine.def
+      password: ${LOCAL_DEV_ADMIN_PASSWORD:}
+      relax-password-policy: false
+      roles:
+        - ADMIN
+    local-dev-operator-seed:
+      enabled: false
+      email: e2e@life-engine.def
+      password: ${LOCAL_DEV_E2E_PASSWORD:}
+      sync-password: true
+      roles:
+        - USER
+    local-dev-password-rotation-seed:
+      enabled: false
+      email: e2e-password-rotation@life-engine.def
+      password: ${LOCAL_DEV_PASSWORD_ROTATION_PASSWORD:}
+      sync-password: true
+      roles:
+        - USER
+    dev-password-reset:
+      enabled: false
+      api-key: ${DEV_PASSWORD_RESET_API_KEY:}
+      relax-password-policy: true
+    local-dev-registration:
+      enabled: false
+      allowed-email-domain-suffixes:
+        - "@life-engine.local"
+        - "@it.local"
+    google-login:
+      client-id: ${GOOGLE_LOGIN_CLIENT_ID:}
+      client-secret: ${GOOGLE_LOGIN_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_LOGIN_REDIRECT_URI:http://localhost:8080/api/auth/google/callback}
+      scopes: "openid email profile"
+      login-success-redirect-uri: ${GOOGLE_LOGIN_BO_RETURN_URL:http://localhost:4200/auth/google/callback}
+      link-success-redirect-uri: ${GOOGLE_LOGIN_LINK_SUCCESS_REDIRECT_URI:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, metrics, info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

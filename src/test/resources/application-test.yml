@@ -1,0 +1,34 @@
+# Test profile for life-engine-auth. Mirrors apps/core-app/src/test/resources/application-test.yml
+# minus agents-python gRPC + workflow dispatch + crypto-bot keys (no longer on the classpath).
+
+spring:
+  main:
+    banner-mode: off
+  datasource:
+    password: ${SPRING_DATASOURCE_PASSWORD:test}
+  r2dbc:
+    password: ${SPRING_R2DBC_PASSWORD:test}
+  flyway:
+    password: ${SPRING_FLYWAY_PASSWORD:test}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: warn
+    com.devito.lifeengine: info
+
+lifeengine:
+  deployment:
+    env: test
+  security:
+    guest:
+      enabled: false
+    jwt:
+      secret: ${JWT_SECRET:test-jwt-secret-minimum-32-characters-long!!}
+    password-reset:
+      expose-token-for-testing: true

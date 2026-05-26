@@ -1,0 +1,25 @@
+# CI / ephemeral environments overrides for life-engine-auth.
+# Mirrors apps/core-app/src/main/resources/application-ci.yml minus non-auth keys.
+lifeengine:
+  deployment:
+    env: test
+  security:
+    password-reset:
+      expose-token-for-testing: true
+    local-dev-password-rotation-seed:
+      enabled: true
+      email: e2e-password-rotation@life-engine.local
+      password: ${LOCAL_DEV_PASSWORD_ROTATION_PASSWORD:DevOnly_RotatePass_9x!}
+      sync-password: true
+      roles:
+        - USER
+    dev-password-reset:
+      enabled: ${DEV_PASSWORD_RESET_ENABLED:false}
+      api-key: ${DEV_PASSWORD_RESET_API_KEY:}
+      relax-password-policy: true
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

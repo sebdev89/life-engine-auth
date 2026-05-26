@@ -1,0 +1,79 @@
+# Local development overrides for life-engine-auth.
+# This profile is loaded automatically when no other profile is active because
+# `spring.profiles.default: local` is set in application.yml.
+#
+# Safe-by-default: every secret has a development-only fallback so `mvn spring-boot:run`
+# works on a fresh checkout without any exported environment variables. Production never
+# loads this file; production secrets come from application.yml + env vars only.
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+spring:
+  # Database ownership: life-engine-auth owns DB `life_engine_auth` (schema `public`).
+  # Postgres instance is still the docker-compose container on localhost:5433, user/pass life/life,
+  # but the database name is now per-service. See docs/operations/11-database-ownership.md.
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/life_engine_auth}
+    username: ${SPRING_DATASOURCE_USERNAME:life}
+    password: ${SPRING_DATASOURCE_PASSWORD:life}
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5433/life_engine_auth}
+    username: ${SPRING_R2DBC_USERNAME:life}
+    password: ${SPRING_R2DBC_PASSWORD:life}
+  flyway:
+    url: ${SPRING_FLYWAY_URL:jdbc:postgresql://localhost:5433/life_engine_auth}
+    user: ${SPRING_FLYWAY_USER:life}
+    password: ${SPRING_FLYWAY_PASSWORD:life}
+    # Defensive: `life_engine_auth` is owned exclusively by this service so its Flyway history
+    # contains only V32..V54. The patterns below are kept as a safety net for operators who
+    # temporarily repoint at the shared `life_engine` modulith DB (where the history table
+    # carries modulith-owned scripts that have no matching classpath file — `missing` — and
+    # versions ahead of V54 — `future`). Against the dedicated `life_engine_auth` DB these
+    # patterns are a no-op.
+    ignore-migration-patterns:
+      - "*:missing"
+      - "*:future"
+
+lifeengine:
+  deployment:
+    env: ${APP_ENV:local}
+  security:
+    # HS256 (jjwt) needs >= 32 UTF-8 bytes. This is a dev-only secret — production must override.
+    jwt:
+      secret: ${JWT_SECRET:local-dev-jwt-hs512-secret-minimum-32-chars-long-xx}
+    password-reset:
+      expose-token-for-testing: ${PASSWORD_RESET_DEBUG_TOKEN:true}
+      resend-api-key: ${RESEND_API_KEY:}
+      from-address: ${RESEND_FROM:}
+      reset-link-base-url: ${PASSWORD_RESET_PUBLIC_BO_URL:http://localhost:4200}
+    admin-seed:
+      enabled: true
+      email: admin@life-engine.local
+      password: ${LOCAL_DEV_ADMIN_PASSWORD:admin123456}
+      relax-password-policy: true
+      roles:
+        - ADMIN
+    local-dev-operator-seed:
+      enabled: true
+      email: e2e@life-engine.local
+      password: ${LOCAL_DEV_E2E_PASSWORD:DevOnly_SmokePass_9x!}
+      sync-password: true
+      roles:
+        - USER
+    local-dev-password-rotation-seed:
+      enabled: true
+      email: e2e-password-rotation@life-engine.local
+      password: ${LOCAL_DEV_PASSWORD_ROTATION_PASSWORD:DevOnly_RotatePass_9x!}
+      sync-password: true
+      roles:
+        - USER
+    dev-password-reset:
+      enabled: true
+      api-key: ${DEV_PASSWORD_RESET_API_KEY:dev-only-reset-key}
+      relax-password-policy: true
+    local-dev-registration:
+      enabled: ${LOCAL_DEV_REGISTRATION_ENABLED:false}

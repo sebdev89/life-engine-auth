@@ -1,0 +1,35 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="LifeEngineAuthApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+    <module name="life-engine-auth" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.devito.lifeengine.LifeEngineAuthApplication" />
+    <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
+    <option name="ALTERNATIVE_JRE_PATH" />
+    <option name="ACTIVE_PROFILES" value="local" />
+    <envs>
+      <env name="APP_ENV" value="local" />
+      <env name="LIFEENGINE_DEPLOYMENT_ENV" value="local" />
+      <env name="SPRING_PROFILES_ACTIVE" value="local" />
+      <env name="JWT_SECRET" value="local-dev-jwt-hs512-secret-minimum-32-chars-long-xx" />
+      <env name="SPRING_DATASOURCE_URL" value="jdbc:postgresql://localhost:5433/life_engine_auth" />
+      <env name="SPRING_DATASOURCE_USERNAME" value="life" />
+      <env name="SPRING_DATASOURCE_PASSWORD" value="life" />
+      <env name="SPRING_R2DBC_URL" value="r2dbc:postgresql://localhost:5433/life_engine_auth" />
+      <env name="SPRING_R2DBC_USERNAME" value="life" />
+      <env name="SPRING_R2DBC_PASSWORD" value="life" />
+      <env name="SPRING_FLYWAY_URL" value="jdbc:postgresql://localhost:5433/life_engine_auth" />
+      <env name="SPRING_FLYWAY_USER" value="life" />
+      <env name="SPRING_FLYWAY_PASSWORD" value="life" />
+      <env name="FLYWAY_ENABLED" value="true" />
+      <env name="PASSWORD_RESET_DEBUG_TOKEN" value="true" />
+      <env name="PASSWORD_RESET_PUBLIC_BO_URL" value="http://localhost:4200" />
+      <env name="LOCAL_DEV_ADMIN_PASSWORD" value="admin123456" />
+      <env name="LOCAL_DEV_E2E_PASSWORD" value="DevOnly_SmokePass_9x!" />
+      <env name="LOCAL_DEV_PASSWORD_ROTATION_PASSWORD" value="DevOnly_RotatePass_9x!" />
+      <env name="DEV_PASSWORD_RESET_API_KEY" value="dev-only-reset-key" />
+      <env name="LIFE_ENGINE_AUTH_PORT" value="8081" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

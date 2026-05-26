@@ -1,0 +1,33 @@
+# Production overrides for life-engine-auth.
+# Mirrors apps/core-app/src/main/resources/application-prod.yml minus the agent-runtime gRPC internal-secret
+# requirement (now enforced inside life-engine-runtime when extracted).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+server:
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+lifeengine:
+  deployment:
+    env: ${APP_ENV}
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+    bootstrap-admin-email: ${AUTH_BOOTSTRAP_USER}
+    bootstrap-admin-password: ${AUTH_BOOTSTRAP_PASSWORD}
+    admin-seed:
+      enabled: false
+    local-dev-operator-seed:
+      enabled: false
+    local-dev-password-rotation-seed:
+      enabled: false
+    dev-password-reset:
+      enabled: false
+    local-dev-registration:
+      enabled: false

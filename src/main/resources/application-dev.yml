@@ -1,0 +1,28 @@
+# Dev / shared environment overrides for life-engine-auth.
+# Mirrors apps/core-app/src/main/resources/application-dev.yml minus non-auth keys
+# (agent-runtime gRPC secret + dev-agent retrieval/workflow/LLM/RAG configs deliberately left behind).
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+lifeengine:
+  deployment:
+    env: ${APP_ENV:dev}
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+    bootstrap-admin-email: ${AUTH_BOOTSTRAP_USER}
+    bootstrap-admin-password: ${AUTH_BOOTSTRAP_PASSWORD}
+    admin-seed:
+      enabled: false
+    local-dev-operator-seed:
+      enabled: ${LOCAL_DEV_E2E_SEED_ENABLED:false}
+      email: e2e@life-engine.local
+      password: ${LOCAL_DEV_E2E_PASSWORD:}
+      sync-password: true
+      roles:
+        - USER
+    local-dev-registration:
+      enabled: ${LOCAL_DEV_REGISTRATION_ENABLED:false}
