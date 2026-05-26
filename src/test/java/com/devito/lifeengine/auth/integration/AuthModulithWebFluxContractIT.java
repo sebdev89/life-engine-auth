@@ -87,15 +87,15 @@ class AuthModulithWebFluxContractIT extends AbstractModulithWebFluxIntegrationIT
     }
 
     @Test
-    @DisplayName("GET /api/platform/config without Authorization → 200 (public bootstrap)")
-    void platformConfigIsPublic() {
-        webClient.get().uri("/api/platform/config").exchange().expectStatus().isOk();
+    @DisplayName("GET /api/platform/config without Authorization → 401 (not owned by life-engine-auth)")
+    void platformConfigIsNotOwnedByAuth() {
+        webClient.get().uri("/api/platform/config").exchange().expectStatus().isUnauthorized();
     }
 
     @Test
-    @DisplayName("GET /api/platform/health without Authorization → 200 (public bootstrap)")
-    void platformHealthIsPublic() {
-        webClient.get().uri("/api/platform/health").exchange().expectStatus().isOk();
+    @DisplayName("GET /api/platform/health without Authorization → 401 (not owned by life-engine-auth)")
+    void platformHealthIsNotOwnedByAuth() {
+        webClient.get().uri("/api/platform/health").exchange().expectStatus().isUnauthorized();
     }
 
     @Test

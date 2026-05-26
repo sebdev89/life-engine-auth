@@ -24,25 +24,30 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /**
- * WebFlux authorization for {@code core-app}. Role model for BO JWT authorities:
+ * WebFlux authorization for the standalone {@code life-engine-auth} service. This service owns identity,
+ * sessions, refresh tokens, RBAC, OAuth login, password recovery, and the security control plane only;
+ * non-auth verticals (dev-agent, control-plane, crypto, workflow, agents, memory/RAG, finance, social, OCR,
+ * media-studio, BO, etc.) are deployed elsewhere and their authorization rules must NOT be modelled here.
+ *
+ * <p>Role model on the BO JWT:
  *
  * <ul>
  *   <li>{@link com.devito.lifeengine.platform.PlatformRoles#ROLE_GUEST} — read-only {@code GET /api/auth/me/*}
  *       slices + operator session endpoints in {@code /api/auth/session|sessions}; no mutations under {@code
- *       /api/auth/me/**} except as listed in matchers below.
+ *       /api/auth/me/**}.
  *   <li>{@link com.devito.lifeengine.platform.PlatformRoles#ROLE_USER} — full self-service under {@code
- *       /api/auth/me/**}; most {@code /api/bo/**} APIs.
- *   <li>{@link com.devito.lifeengine.platform.PlatformRoles#ROLE_ADMIN} — control plane {@code /api/security/**},
- *       admin security observability, and other privileged APIs.
+ *       /api/auth/me/**}.
+ *   <li>{@link com.devito.lifeengine.platform.PlatformRoles#ROLE_ADMIN} — control plane {@code /api/security/**}
+ *       and admin security observability under {@code /api/auth/security/**}, {@code /api/auth/timeline},
+ *       {@code /api/auth/metrics/overview}.
  * </ul>
  *
- * <p><b>Normalization:</b> canonical admin API for identity/sessions/tokens/global audit is {@code /api/security/**}.
- * Legacy mirrors under {@code /api/admin/**} and {@code /api/auth/users/**} were removed.
+ * <p><b>Boundary:</b> any unmatched {@code /api/**} path falls through to {@code anyExchange().denyAll()}.
+ * This service intentionally has no opinion on routes it does not own — they will be rejected as 401/403 at
+ * the edge instead of being silently authorised.
  *
- * <p>Human-readable tables: {@code docs/auth-v1/auth-role-map.md} in the workspace repo.
- *
- * <p><b>Matcher order:</b> first match wins — keep {@code /api/auth/me} GET-specific reads for guest before {@code
- * /api/auth/me/**}, and both before the {@code /api/**} catch-all (which excludes {@code ROLE_GUEST}).
+ * <p><b>Matcher order:</b> first match wins — keep {@code /api/auth/me} GET-specific reads for guest before
+ * {@code /api/auth/me/**}.
  */
 @Configuration
 @EnableWebFluxSecurity
@@ -76,7 +81,6 @@ public class SecurityConfig {
                         auth -> {
                             configurePublicEndpoints(auth, environment, guestAuthProperties);
                             configureAdminEndpoints(auth);
-                            configureAgentEndpoints(auth);
                             configureAuthEndpoints(auth);
                         })
                 .exceptionHandling(spec ->
@@ -115,7 +119,10 @@ public class SecurityConfig {
                 .build();
     }
 
-    /** OPTIONS, OpenAPI rules, guest/login surface, actuator, OAuth callbacks — anonymous permitted where noted. */
+    /**
+     * OPTIONS, OpenAPI rules, guest/login surface, actuator probes, OAuth callbacks, and non-prod gated dev
+     * registration / dev password reset. All other public surface belongs to whichever service owns it.
+     */
     private static void configurePublicEndpoints(
             ServerHttpSecurity.AuthorizeExchangeSpec auth,
             Environment environment,
@@ -137,6 +144,9 @@ public class SecurityConfig {
                 .permitAll()
                 .pathMatchers(HttpMethod.POST, "/api/auth/password/forgot", "/api/auth/password/reset")
                 .permitAll()
+                // Non-prod gated controllers (@ConditionalOnProperty + NotProductionEnvironmentCondition /
+                // LocalTestOnlyAuthToolingCondition). The matchers stay permitAll() because the controllers
+                // simply do not exist in prod, so the route returns 404 there.
                 .pathMatchers(HttpMethod.POST, "/api/auth/dev/register")
                 .permitAll()
                 .pathMatchers(HttpMethod.POST, "/api/dev-auth/reset-password")
@@ -147,10 +157,6 @@ public class SecurityConfig {
                 .permitAll()
                 .pathMatchers("/error")
                 .permitAll()
-                .pathMatchers("/api/email/oauth/google/callback")
-                .permitAll()
-                .pathMatchers(HttpMethod.GET, "/api/email/oauth/google/authorize")
-                .permitAll()
                 .pathMatchers(HttpMethod.GET, "/api/auth/google/callback")
                 .permitAll()
                 .pathMatchers(HttpMethod.GET, "/api/auth/google/status")
@@ -159,7 +165,10 @@ public class SecurityConfig {
                 .permitAll();
     }
 
-    /** RBAC catalogue + auth observability + {@code /api/security/**}. */
+    /**
+     * Admin-only auth surfaces: RBAC catalogue, cross-operator auth observability and the security control
+     * plane {@code /api/security/**}.
+     */
     private static void configureAdminEndpoints(ServerHttpSecurity.AuthorizeExchangeSpec auth) {
         auth.pathMatchers(HttpMethod.GET, "/api/auth/roles", "/api/auth/roles/*")
                 .hasAuthority("AUTH:RBAC:MANAGE")
@@ -186,87 +195,10 @@ public class SecurityConfig {
                 .hasAuthority(PlatformRoles.ROLE_ADMIN);
     }
 
-    /** Vertical APIs, platform bootstrap, Dev Agent, Control Plane, Agent Runtime, integrations. */
-    private static void configureAgentEndpoints(ServerHttpSecurity.AuthorizeExchangeSpec auth) {
-        auth.pathMatchers("/api/ocr/v1/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/media-studio/v1/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/workflow/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/boss/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER);
-        configurePlatformEndpoints(auth);
-        auth.pathMatchers(HttpMethod.PUT, "/api/dev-agent/runtime/settings")
-                .hasAuthority(PlatformRoles.ROLE_ADMIN)
-                .pathMatchers(HttpMethod.POST, "/api/dev-agent/runtime/settings/reset")
-                .hasAuthority(PlatformRoles.ROLE_ADMIN)
-                .pathMatchers("/api/dev-agent/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                /*
-                 * BO shell + dashboard: control-plane status/overview/logs/toggles/SSE events.
-                 * Same authority envelope as the {@code /api/**} catch-all, listed explicitly for audits.
-                 */
-                .pathMatchers("/api/control-plane/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                /*
-                 * interaction-platform: ingest/list/detail + modes catalog. BO JWT only
-                 * (ADMIN|USER) — matches pipeline auth (no anonymous writes; GUEST excluded).
-                 */
-                .pathMatchers("/api/interactions/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/crypto-bot/runtime", "/api/crypto-bot/runtime/**")
-                .hasAuthority(PlatformRoles.ROLE_ADMIN)
-                .pathMatchers("/api/bo/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/crypto", "/api/crypto/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/crypto-bot/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/memory/**", "/api/rag/**", "/api/benchmark/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/email/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/social/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/finance/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/bogabot/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/land-radar/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/expenses/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers("/api/agents/settings/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
-                .pathMatchers(
-                        HttpMethod.GET,
-                        "/api/agents/overview",
-                        "/api/agents/health",
-                        "/api/agents/readiness",
-                        "/api/agents/models",
-                        "/api/agents/debug/config")
-                .hasAnyAuthority(
-                        PlatformRoles.ROLE_ADMIN,
-                        PlatformRoles.ROLE_USER,
-                        PlatformRoles.ROLE_GUEST)
-                .pathMatchers("/api/agents/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER);
-    }
-
     /**
-     * AI Control Plane shell bootstrap + load balancer probes.
-     *
-     * <p>Anonymous permitted: BO and Playwright smoke tests load these before JWT exists;
-     * payload is non-secret (portfolio flags + shallow health). Authenticated callers
-     * still receive the same JSON. Tighter routes (e.g. /api/platform/timeline) stay
-     * behind /api/** below.
+     * Session list, {@code /api/auth/me/**}, {@code /api/auth/session(s)} reads. Any unmatched path falls
+     * through to {@code denyAll()} — this service intentionally does not authorise routes it does not own.
      */
-    private static void configurePlatformEndpoints(ServerHttpSecurity.AuthorizeExchangeSpec auth) {
-        auth.pathMatchers(HttpMethod.GET, "/api/platform/config", "/api/platform/health").permitAll();
-    }
-
-    /** Session list, {@code /api/auth/me/**}, catch-all {@code /api/**}. */
     private static void configureAuthEndpoints(ServerHttpSecurity.AuthorizeExchangeSpec auth) {
         auth.pathMatchers(HttpMethod.GET, "/api/auth/session")
                 .hasAnyAuthority(
@@ -309,8 +241,9 @@ public class SecurityConfig {
                         PlatformRoles.ROLE_USER, PlatformRoles.ROLE_ADMIN)
                 .pathMatchers(HttpMethod.GET, "/api/auth/me")
                 .authenticated()
-                .pathMatchers("/api/**")
-                .hasAnyAuthority(PlatformRoles.ROLE_ADMIN, PlatformRoles.ROLE_USER)
+                // Everything else (including unknown /api/** routes owned by other services) is denied at
+                // the edge of this service. Catch-all is intentional — do not loosen it to permitAll() or
+                // to hasAnyAuthority(ADMIN, USER) here; that is the responsibility of the owning service.
                 .anyExchange()
                 .denyAll();
     }

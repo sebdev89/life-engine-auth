@@ -42,11 +42,6 @@ public final class LifeEngineModulithPostgresItSupport {
         r.add("lifeengine.security.bootstrap-admin-email", () -> bootstrapEmail);
         r.add("lifeengine.security.bootstrap-admin-password", () -> bootstrapPassword);
         r.add("lifeengine.security.password-reset.expose-token-for-testing", () -> "true");
-        // Retrieval "enabled" lets PromptBackedMemoryAgentAdapter use the read-only empty-lexical fast path for
-        // ANALYZE_ONLY without calling memory llm.complete; strict/require-index false keeps index preflight off.
-        r.add("lifeengine.dev-agent.retrieval.enabled", () -> "true");
-        r.add("lifeengine.dev-agent.execution.strict-real-mode", () -> "false");
-        r.add("lifeengine.dev-agent.execution.require-index-ready", () -> "false");
     }
 
     private static String toR2dbcUrl(String jdbcUrl) {

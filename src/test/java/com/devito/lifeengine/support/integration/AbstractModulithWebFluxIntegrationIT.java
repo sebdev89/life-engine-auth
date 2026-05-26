@@ -18,26 +18,9 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
- * Shared full-stack slice for Modulith WebFlux integration tests: Flyway + JDBC + R2DBC on
- * {@link LifeEngineModulithPostgresItSupport}, JWT secret, bootstrap admin, and stable dev-agent flags. Concrete suites
- * live per vertical under
- * {@code com.devito.lifeengine.<module>.integration} and add only module-specific scenarios.
- *
- * <p>Layout (under {@code apps/core-app/src/test/java}):
- *
- * <pre>
- * com.devito.lifeengine.support.integration/
- *   AbstractModulithWebFluxIntegrationIT.java
- *   LifeEngineModulithPostgresItSupport.java
- * com.devito.lifeengine.auth.integration/
- *   AuthModulithWebFluxContractIT.java
- * com.devito.lifeengine.devagent.integration/
- *   DevAgentModulithWebFluxContractIT.java
- * com.devito.lifeengine.agentruntime.integration/
- *   AgentRuntimeModulithWebFluxContractIT.java
- * com.devito.lifeengine.memoryrag.integration/
- *   MemoryRagModulithWebFluxContractIT.java
- * </pre>
+ * Shared full-stack slice for auth integration tests in {@code life-engine-auth}: Flyway + JDBC + R2DBC on
+ * {@link LifeEngineModulithPostgresItSupport}, JWT secret, and bootstrap admin. Concrete suites live under
+ * {@code com.devito.lifeengine.auth.integration} and add only auth-specific scenarios.
  *
  * <p>Runs with Failsafe ({@code *IT.java}), Docker required — same discipline as {@code AuthCriticalFlowsIT}.
  *

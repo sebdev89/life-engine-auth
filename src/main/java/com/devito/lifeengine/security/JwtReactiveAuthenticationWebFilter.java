@@ -30,8 +30,15 @@ import reactor.core.publisher.Mono;
 
 /**
  * Parses {@code Authorization: Bearer} JWT and attaches {@link BoUserPrincipal} to the reactive security
- * context (WebFlux / Netty). Path skips mirror the former servlet filter so public auth routes stay
- * anonymous until {@link org.springframework.security.config.web.server.ServerHttpSecurity} authorizes them.
+ * context (WebFlux / Netty). Path skips cover the public auth surface ({@code login}, {@code refresh},
+ * {@code logout}, {@code revoke}, password recovery, OAuth callbacks, non-prod gated dev endpoints) so the
+ * downstream {@link org.springframework.security.config.web.server.ServerHttpSecurity} chain handles
+ * authorisation for those routes.
+ *
+ * <p>This filter is intentionally vertical-agnostic: it does not know about dev-agent, control-plane,
+ * crypto, workflow, agents, memory/RAG, finance, social, OCR, media-studio, BO, or any other route owned
+ * by a different service. SSE-aware handling (returning {@code AUTH_EXPIRED} on token expiry instead of
+ * forcing browsers to reconnect indefinitely) is triggered generically by {@code Accept: text/event-stream}.
  */
 public class JwtReactiveAuthenticationWebFilter implements WebFilter {
 
@@ -59,17 +66,9 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         if (shouldSkip(exchange)) {
-            if (log.isDebugEnabled() && isBoardDiag(exchange)) {
-                log.debug(
-                        "jwt_web_filter_diag outcome=skipped_public_route path={} method={} query={}",
-                        exchange.getRequest().getPath().value(),
-                        exchange.getRequest().getMethod(),
-                        nullToDash(exchange.getRequest().getURI().getRawQuery()));
-            }
             return chain.filter(exchange);
         }
         String path = exchange.getRequest().getPath().value();
-        String query = exchange.getRequest().getURI().getRawQuery();
         String auth = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         boolean authHeaderPresent = auth != null && !auth.isBlank();
         boolean bearerShape =
@@ -78,11 +77,8 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
 
         if (outcome.principal().isEmpty()) {
             String reason = outcome.failureReason().orElse("unknown");
-            boolean sseEvents =
-                    isControlPlaneEventsSse(path, exchange.getRequest().getMethod())
-                            || isCryptoObservabilityEventsSse(path, exchange.getRequest().getMethod());
             boolean expired = "expired".equals(reason);
-            if (sseEvents && expired) {
+            if (expired && acceptsEventStream(exchange)) {
                 log.debug(
                         "sse_closed reason=auth_expired path={} traceId={}",
                         path,
@@ -103,39 +99,11 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
             return writeJson(exchange, HttpStatus.UNAUTHORIZED, null);
         }
         BoUserPrincipal p = outcome.principal().get();
-        if (log.isDebugEnabled() && isBoardDiag(exchange)) {
-            log.debug(
-                    "jwt_web_filter_diag outcome=jwt_accepted_enter_session_gate path={} method={} query={} userId={} sid={} role={} authorityCount={}",
-                    path,
-                    exchange.getRequest().getMethod(),
-                    nullToDash(query),
-                    p.userId(),
-                    p.sessionId(),
-                    p.primaryRole(),
-                    p.authorities().size());
-        }
         return reactiveUserSessionGate
                 .assertAccessAllowed(exchange, p)
                 .then(
                         Mono.defer(
                                 () -> {
-                                    if (log.isDebugEnabled() && isAuthObservabilityPath(path)) {
-                                        log.debug(
-                                                "jwt filter: principal attached path={} userId={} sessionId={} authorityCount={}",
-                                                path,
-                                                p.userId(),
-                                                p.sessionId(),
-                                                p.authorities().size());
-                                    }
-                                    if (log.isDebugEnabled() && isBoardDiag(exchange)) {
-                                        log.debug(
-                                                "jwt_web_filter_diag outcome=authenticated path={} method={} query={} userId={} sid={}",
-                                                path,
-                                                exchange.getRequest().getMethod(),
-                                                nullToDash(query),
-                                                p.userId(),
-                                                p.sessionId());
-                                    }
                                     List<SimpleGrantedAuthority> granted =
                                             p.authorities().stream()
                                                     .map(SimpleGrantedAuthority::new)
@@ -156,44 +124,29 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
                                     exchange.getRequest().getMethod(),
                                     ex.getStatusCode(),
                                     ex.getReason());
-                            if (log.isDebugEnabled() && isBoardDiag(exchange)) {
-                                log.debug(
-                                        "jwt_web_filter_diag outcome=rejected_in_filter path={} method={} query={} httpStatus={} reason={} userId={} sid={}",
-                                        path,
-                                        exchange.getRequest().getMethod(),
-                                        nullToDash(query),
-                                        ex.getStatusCode().value(),
-                                        nullToDash(ex.getReason()),
-                                        p.userId(),
-                                        p.sessionId());
-                            }
                             return writeJson(exchange, ex.getStatusCode(), ex.getReason());
                         });
     }
 
-    private static String nullToDash(String s) {
-        return s == null || s.isBlank() ? "-" : s;
-    }
-
-    /** Narrow log fan-out: correlate {@code GET /api/dev-agent/board} success vs failure. */
-    private static boolean isBoardDiag(ServerWebExchange exchange) {
-        var req = exchange.getRequest();
-        if (req.getMethod() != HttpMethod.GET) {
+    /**
+     * Generic SSE detection. Returns true when the client advertises {@code text/event-stream} via the
+     * {@code Accept} header — used to convert {@code 401 expired} into a stream-friendly close with the
+     * {@code AUTH_EXPIRED} hint instead of an opaque reconnect loop. Intentionally route-agnostic.
+     */
+    private static boolean acceptsEventStream(ServerWebExchange exchange) {
+        if (exchange.getRequest().getMethod() != HttpMethod.GET) {
             return false;
         }
-        return "/api/dev-agent/board".equals(req.getPath().value());
-    }
-
-    private static boolean isAuthObservabilityPath(String path) {
-        return path.startsWith("/api/control-plane") || path.startsWith("/api/dev-agent");
-    }
-
-    private static boolean isControlPlaneEventsSse(String path, HttpMethod method) {
-        return method == HttpMethod.GET && "/api/control-plane/events".equals(path);
-    }
-
-    private static boolean isCryptoObservabilityEventsSse(String path, HttpMethod method) {
-        return method == HttpMethod.GET && "/api/crypto/observability/events".equals(path);
+        List<MediaType> accept = exchange.getRequest().getHeaders().getAccept();
+        if (accept == null || accept.isEmpty()) {
+            return false;
+        }
+        for (MediaType mt : accept) {
+            if (MediaType.TEXT_EVENT_STREAM.isCompatibleWith(mt)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String traceIdForLog(ServerWebExchange exchange) {
@@ -215,20 +168,10 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
             String optionalReason,
             String optionalErrorCode) {
         HttpStatus status = ApiErrorHttpSupport.resolveOrUnauthorized(statusCode);
-        String path = exchange.getRequest().getPath().value();
         String message =
                 optionalReason != null && !optionalReason.isBlank()
                         ? optionalReason.trim()
                         : ApiErrorHttpSupport.defaultMessageForHttpStatus(status.value());
-        if (status == HttpStatus.UNAUTHORIZED
-                && (path.startsWith("/api/control-plane") || path.startsWith("/api/crypto/observability"))
-                && !isControlPlaneEventsSse(path, exchange.getRequest().getMethod())
-                && !isCryptoObservabilityEventsSse(path, exchange.getRequest().getMethod())) {
-            log.debug(
-                    "sse_auth_hint path={} method={} detail=control-plane route returned 401",
-                    path,
-                    exchange.getRequest().getMethod());
-        }
         byte[] bytes =
                 ApiErrorHttpSupport.envelopeUtf8(
                         objectMapper,
@@ -252,13 +195,6 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
             return true;
         }
         if (path.startsWith("/actuator/prometheus") || path.startsWith("/actuator/metrics")) {
-            return true;
-        }
-        /*
-         * Must mirror {@link SecurityConfig} permitAll for platform bootstrap — otherwise this filter returns 401
-         * before the anonymous chain reaches authorized controllers.
-         */
-        if (m == HttpMethod.GET && ("/api/platform/config".equals(path) || "/api/platform/health".equals(path))) {
             return true;
         }
         if ("/api/auth/login".equals(path) && m == HttpMethod.POST) {
@@ -295,12 +231,6 @@ public class JwtReactiveAuthenticationWebFilter implements WebFilter {
                     || "/swagger-ui.html".equals(path)) {
                 return true;
             }
-        }
-        if (path.startsWith("/api/email/oauth/google/callback")) {
-            return true;
-        }
-        if ("/api/email/oauth/google/authorize".equals(path) && m == HttpMethod.GET) {
-            return true;
         }
         if ("/api/auth/google/callback".equals(path) && m == HttpMethod.GET) {
             return true;

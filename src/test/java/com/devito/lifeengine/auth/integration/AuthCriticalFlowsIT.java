@@ -162,19 +162,12 @@ class AuthCriticalFlowsIT {
     }
 
     @Test
-    @DisplayName("Fresh access token passes session gate on /api/auth/me and /api/dev-agent/runs (no session_inactive)")
-    void loginThenMeAndDevAgentRunsAreAuthorized() {
+    @DisplayName("Fresh access token passes session gate on /api/auth/me (no session_inactive)")
+    void loginThenMeIsAuthorized() {
         Tokens t = login(BOOTSTRAP_EMAIL, BOOTSTRAP_PASSWORD);
         webClient
                 .get()
                 .uri("/api/auth/me")
-                .header(HttpHeaders.AUTHORIZATION, bearer(t.accessToken()))
-                .exchange()
-                .expectStatus()
-                .isOk();
-        webClient
-                .get()
-                .uri("/api/dev-agent/runs")
                 .header(HttpHeaders.AUTHORIZATION, bearer(t.accessToken()))
                 .exchange()
                 .expectStatus()
