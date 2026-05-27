@@ -11,8 +11,21 @@ import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 /**
- * WebFlux CORS: permissive localhost patterns for {@code local}/{@code dev}/{@code test}; production uses an explicit
- * allow-list ({@code lifeengine.http.cors.allowed-origins}) — no wildcards.
+ * WebFlux CORS.
+ *
+ * <p>Two strict modes only:
+ *
+ * <ul>
+ *   <li><b>local</b> ({@code lifeengine.deployment.env=local} or Spring profile {@code local}): permissive
+ *       localhost-only origin patterns so {@code mvn spring-boot:run} + a local BO (Angular 4200, Ionic 8100,
+ *       arbitrary localhost / 127.0.0.1 ports) works without exporting an env var. Preserves local frontend
+ *       development ergonomics.</li>
+ *   <li><b>everything else</b> (dev, ci, test, prod, unset): explicit allow-list via
+ *       {@code lifeengine.http.cors.allowed-origins} (comma separated). No wildcards. No localhost shortcut.
+ *       Shared dev / test / prod-like environments must list their FE origins explicitly. An empty list
+ *       blocks all cross-origin requests at the CORS layer — pair with
+ *       {@code lifeengine.http.cors.prod-allow-empty=true} only as a documented opt-out.</li>
+ * </ul>
  */
 @Configuration
 public class CorsConfig {
@@ -22,14 +35,14 @@ public class CorsConfig {
     @Bean
     public CorsWebFilter corsWebFilter(Environment environment) {
         CorsConfiguration config = new CorsConfiguration();
-        if (isProductionDeployment(environment)) {
-            config.setAllowedOrigins(parseAllowedOrigins(environment));
-        } else {
+        if (isLocalDevelopment(environment)) {
             /*
-             * Local BO (4200), Ionic-style dev servers (8100), and arbitrary localhost / 127.0.0.1 ports — matches
-             * {@code LOCAL_STACK.md}. Patterns work with {@code allowCredentials(true)}.
+             * Local-only fallback: localhost / 127.0.0.1 with any port. Patterns work with
+             * allowCredentials(true). Matches LOCAL_STACK.md. Never used outside the local profile.
              */
             config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+        } else {
+            config.setAllowedOrigins(parseAllowedOrigins(environment));
         }
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(
@@ -44,9 +57,20 @@ public class CorsConfig {
         return new CorsWebFilter(source);
     }
 
-    private static boolean isProductionDeployment(Environment environment) {
+    /**
+     * True only for genuine local development. {@code dev} / {@code ci} / {@code test} / {@code prod} all
+     * fall into the explicit allow-list branch — they are shared or production-like and must declare their
+     * own origins.
+     */
+    private static boolean isLocalDevelopment(Environment environment) {
         String env = deploymentEnv(environment);
-        return "prod".equals(env) || environment.acceptsProfiles(Profiles.of("prod"));
+        if ("local".equals(env)) {
+            return true;
+        }
+        if (!env.isEmpty()) {
+            return false;
+        }
+        return environment.acceptsProfiles(Profiles.of("local"));
     }
 
     /** Prefer {@code lifeengine.deployment.env}, then {@code APP_ENV}. */

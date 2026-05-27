@@ -925,8 +925,12 @@ class AuthCriticalFlowsIT {
     }
 
     @Test
-    @DisplayName("POST /api/auth/logout revokes refresh; access JWT still works until expiry; refresh fails")
-    void logoutRevokesRefreshChainAccessJwtStillValid() {
+    @DisplayName("POST /api/auth/logout revokes refresh + session; subsequent access & refresh both 401")
+    void logoutRevokesRefreshChainAndSessionGate() {
+        // Auth's logout flow revokes the user_sessions row (markUserSessionRevokedBySessionId) in
+        // addition to the refresh token. With lifeengine.security.jwt.require-active-user-session=true
+        // (default) the reactive session gate rejects subsequent calls using the same access JWT
+        // even before its natural expiry. This test pins that contract.
         Tokens t = login(BOOTSTRAP_EMAIL, BOOTSTRAP_PASSWORD);
         webClient
                 .post()
@@ -942,10 +946,7 @@ class AuthCriticalFlowsIT {
                 .header(HttpHeaders.AUTHORIZATION, bearer(t.accessToken()))
                 .exchange()
                 .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.email")
-                .isEqualTo(BOOTSTRAP_EMAIL);
+                .isUnauthorized();
         refresh(t.refreshToken()).expectStatus().isUnauthorized();
     }
 

@@ -14,7 +14,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
@@ -33,9 +32,7 @@ class AuthSessionRefreshTokenPersistenceIT extends AbstractPostgresPersistenceIT
     @Autowired private RefreshTokenRepository refreshTokens;
     @Autowired private R2dbcEntityTemplate entityTemplate;
 
-    @Autowired
-    @Qualifier("devAgentTransactionalOperator")
-    private TransactionalOperator transactionalOperator;
+    @Autowired private TransactionalOperator transactionalOperator;
 
     @Test
     @DisplayName("Guest user_session insert + read (nullable IP/UA, bo_user_id null)")

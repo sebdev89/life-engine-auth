@@ -13,6 +13,15 @@ server:
     include-binding-errors: never
     include-stacktrace: never
 
+management:
+  endpoint:
+    health:
+      # Production: avoid leaking subsystem statuses to anonymous callers via /actuator/health.
+      # Anonymous probes (LB) still get the top-level status (UP/DOWN). Authenticated ADMIN callers
+      # see the full breakdown.
+      show-details: when-authorized
+      show-components: when-authorized
+
 lifeengine:
   deployment:
     env: ${APP_ENV}
