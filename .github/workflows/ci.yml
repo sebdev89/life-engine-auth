@@ -1,0 +1,46 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile & unit tests (Java 21, Maven)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Show toolchain
+        run: |
+          java -version
+          mvn -version
+
+      - name: Compile (skip tests)
+        run: mvn -B -ntp -DskipTests compile
+
+      # Surefire scope only. Integration tests (*IT.java) need Docker + Postgres
+      # via Testcontainers and run under Failsafe (`mvn verify`); they are
+      # intentionally NOT executed here. A separate verify job with
+      # Testcontainers can be added later without touching this lane.
+      - name: Run unit tests
+        run: mvn -B -ntp test
